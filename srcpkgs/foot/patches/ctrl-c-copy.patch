@@ -1,0 +1,70 @@
+# How this patch was setup
+
+cd ~/working
+git clone --depth=1 https://github.com/void-linux/void-packages
+git clone --depth=1 https://codeberg.org/dnkl/foot
+cd foot
+# Edit source files
+# Insert code from https://codeberg.org/dnkl/foot/issues/1333
+mkdir ../void-packages/srcpkgs/foot/patches/
+git diff input.c > ../void-packages/srcpkgs/foot/patches/ctrl-c-copy.patch
+cd ../void-packages/
+./xbps-src binary-bootstrap
+./xbps-src pkg foot
+# If the above command fails, and you need to modify the patch, modify, then clean:
+# ./xbps-src clean foot
+# then try to build again:
+# ./xbps-src pkg foot
+
+# Install patched version of foot
+sudo xbps-install --repository hostdir/binpkgs foot
+
+# Enable patch feature by adding to ~/.config/foot/foot.ini:
+# clipboard-copy-or-cancel=Control+c
+
+---
+
+diff --git a/config.c b/config.c
+index d63934b..1d6952e 100644
+--- a/config.c
++++ b/config.c
+@@ -98,6 +98,7 @@ static const char *const binding_action_map[] = {
+     [BIND_ACTION_SCROLLBACK_HOME] = "scrollback-home",
+     [BIND_ACTION_SCROLLBACK_END] = "scrollback-end",
+     [BIND_ACTION_CLIPBOARD_COPY] = "clipboard-copy",
++    [BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL] = "clipboard-copy-or-cancel",
+     [BIND_ACTION_CLIPBOARD_PASTE] = "clipboard-paste",
+     [BIND_ACTION_PRIMARY_PASTE] = "primary-paste",
+     [BIND_ACTION_SEARCH_START] = "search-start",
+diff --git a/input.c b/input.c
+index 26f6262..a488715 100644
+--- a/input.c
++++ b/input.c
+@@ -172,6 +172,15 @@ execute_binding(struct seat *seat, struct terminal *term,
+         selection_to_clipboard(seat, term, serial);
+         return true;
+ 
++    case BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL:
++        if (term->selection.coords.start.row < 0 || term->selection.coords.end.row < 0) {
++            // no selection, send control-c
++            term_to_slave(term, "\x03", 1);
++            return true;
++        }
++        selection_to_clipboard(seat, term, serial);
++        return true;
++
+     case BIND_ACTION_CLIPBOARD_PASTE:
+         selection_from_clipboard(seat, term, serial);
+         term_reset_view(term);
+diff --git a/key-binding.h b/key-binding.h
+index f42dbc4..38fb730 100644
+--- a/key-binding.h
++++ b/key-binding.h
+@@ -19,6 +19,7 @@ enum bind_action_normal {
+     BIND_ACTION_SCROLLBACK_HOME,
+     BIND_ACTION_SCROLLBACK_END,
+     BIND_ACTION_CLIPBOARD_COPY,
++    BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL,
+     BIND_ACTION_CLIPBOARD_PASTE,
+     BIND_ACTION_PRIMARY_PASTE,
+     BIND_ACTION_SEARCH_START,
